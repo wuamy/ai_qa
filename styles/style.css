@@ -1,0 +1,36 @@
+/* styles/style.css */
+
+/* Sets the main page background color */
+.st-emotion-cache-18ni7ap {
+  background-color: #f0f2f6;
+}
+
+/* Custom styling for the tabs container */
+div[data-testid="stVerticalTabs"] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Styles the individual tabs (light green background, bold white text) */
+.st-emotion-cache-1f0w4f5 a,
+.st-emotion-cache-1f0w4f5 a[data-active="true"] {
+  background-color: #90EE90;
+  /* Light green */
+  color: white;
+  font-weight: bold;
+  border-radius: 5px;
+  padding: 10px 20px;
+  margin-left: 10px;
+  text-decoration: none;
+  transition: background-color 0.3s;
+}
+
+.st-emotion-cache-1f0w4f5 a:hover {
+  background-color: #7EC0EE;
+  /* Lighter blue on hover */
+}
+
+/* Fixes spacing issues caused by the custom layout */
+.st-emotion-cache-1ae8f6g {
+  padding-top: 0;
+}

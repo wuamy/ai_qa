@@ -1,0 +1,5 @@
+/* styles/style.css */
+
+.st-emotion-cache-18ni7ap {
+  background-color: #f0f2f6;
+}
