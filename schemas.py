@@ -1,85 +1,107 @@
 # schemas.py
-# --- 1. Import necessary libraries ---
-# Pydantic's BaseModel is the foundation for creating data models.
-# Field is used to add extra information (like descriptions) to a field.
-from pydantic import BaseModel, Field
-# List is a type hint from Python's standard typing library.
-from typing import List
 
-# --- 2. Define Pydantic Models for QA Documents ---
+# Import necessary classes from pydantic for creating data models.
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field, root_validator
+
+# --- 1. Core Document Schemas ---
+# These are the fundamental building blocks for our QA documents.
 
 class UserStory(BaseModel):
     """
-    Defines the schema for a user story.
-    A user story is a brief, informal description of a feature from an end-user perspective.
+    Defines the structure for a user story.
     """
-    title: str = Field(description="A clear and concise title for the user story.")
-    description: str = Field(description="A brief description of the user story in the 'As a [user], I want to [action], so that [goal]' format.")
-    acceptance_criteria: List[str] = Field(description="A list of measurable and verifiable conditions that must be met to consider the user story complete.")
-
-class TestCase(BaseModel):
-    """
-    Defines the schema for a single test case.
-    A test case is a set of conditions or variables under which a tester will determine if a system is working correctly.
-    """
-    test_case_id: str = Field(description="A unique identifier for the test case.")
-    description: str = Field(description="A clear description of what is being tested.")
-    test_type: str = Field(description="The type of test case, e.g., 'Positive' or 'Negative'. Positive tests verify that the system behaves as expected with valid inputs, while negative tests ensure the system handles invalid inputs gracefully.")
-    steps: List[str] = Field(description="A list of step-by-step instructions to execute the test case.")
-    expected_result: str = Field(description="The expected outcome of the test case.")
-
-class TestCases(BaseModel):
-    """
-    Defines the schema to contain a comprehensive list of test cases,
-    categorized into positive and negative types.
-    """
-    positive: List[TestCase] = Field(description="A list of positive test cases.")
-    negative: List[TestCase] = Field(description="A list of negative test cases.")
+    title: str = Field(..., description="The title of the user story.")
+    description: str = Field(..., description="The detailed description of the user story.")
+    acceptance_criteria: List[str] = Field(..., description="A list of acceptance criteria for the user story.")
 
 class Requirement(BaseModel):
     """
-    Defines the schema for a single requirement.
-    A requirement is a functional or non-functional specification that the system must meet.
+    Defines the structure for a functional or non-functional requirement.
+    Includes a validator to ensure the 'requirement_id' has a prefix.
     """
-    requirement_id: str = Field(description="A unique identifier for the requirement.")
-    description: str = Field(description="The functional or non-functional requirement.")
-    priority: str = Field(description="The priority of the requirement, e.g., 'High', 'Medium', 'Low'.")
+    requirement_id: str = Field(..., description="A unique identifier for the requirement (e.g., FR-01, NFR-01).")
+    description: str = Field(..., description="The detailed description of the requirement.")
+    
+    @root_validator(pre=True)
+    def add_prefix_if_missing(cls, values):
+        """
+        Validates the data before Pydantic model creation.
+        If the 'requirement_id' is just a number (e.g., '1'), it adds a
+        'FR-' prefix to it. This handles cases where the LLM omits the prefix.
+        """
+        req_id = values.get('requirement_id')
+        if req_id and req_id.isdigit():
+            values['requirement_id'] = f"FR-{int(req_id):02}"
+        return values
 
-# This is a key part of the solution. LangChain's `with_structured_output` requires
-# a single Pydantic model. We use this container class to correctly handle a list of
-# Requirement objects as a single, valid output schema. 
-class RequirementsList(BaseModel):
+class TestCase(BaseModel):
     """
-    A container model for a list of requirements.
-    This wrapper class is necessary to conform to the input requirements of LangChain's structured output.
+    Defines the structure for a test case, including steps and expected results.
+    Includes a validator to ensure the 'test_case_id' has a prefix.
     """
-    requirements: List[Requirement] = Field(description="A list of functional and non-functional requirements.")
+    test_case_id: str = Field(..., description="A unique identifier for the test case (e.g., TC-01).")
+    description: str = Field(..., description="The detailed description of the test case.")
+    # The 'Literal' type ensures that 'test_type' can only be 'positive' or 'negative'.
+    test_type: Literal['positive', 'negative'] = Field(..., description="The type of test case, either 'positive' or 'negative'.")
+    steps: List[str] = Field(..., description="A list of steps to execute the test case.")
+    expected_result: str = Field(..., description="The expected outcome of the test case.")
+
+    @root_validator(pre=True)
+    def add_prefix_to_test_case_id(cls, values):
+        """
+        Adds a 'TC-' prefix to the test_case_id if it's just a number.
+        This handles cases where the LLM omits the prefix.
+        """
+        tc_id = values.get('test_case_id')
+        if tc_id and tc_id.isdigit():
+            values['test_case_id'] = f"TC-{int(tc_id):02}"
+        return values
 
 class RequirementMatrix(BaseModel):
     """
-    Defines the schema for a single entry in a requirements traceability matrix.
-    This matrix links requirements to the test cases that validate them, ensuring
-    all requirements are tested.
+    Defines a single entry in the requirements traceability matrix.
     """
-    requirement_id: str = Field(description="The unique identifier of the requirement.")
-    linked_test_cases: List[str] = Field(description="A list of test case IDs that validate this requirement.")
+    requirement_id: str = Field(..., description="The ID of the requirement from the Requirements list.")
+    linked_test_cases: List[str] = Field(..., description="A list of test case IDs linked to the requirement.")
 
-# Similar to the RequirementsList, this is a container model to allow LangChain
-# to output a list of RequirementMatrix objects as a single, structured object.
+# --- 2. List and Composite Schemas ---
+# These schemas are used to wrap the core schemas into lists or a complete output structure.
+
+class UserStoriesList(BaseModel):
+    """
+    A container for a list of user stories.
+    """
+    user_stories: List[UserStory] = Field(..., description="A list of user stories.")
+
+class RequirementsList(BaseModel):
+    """
+    A container for a list of requirements.
+    """
+    requirements: List[Requirement] = Field(..., description="A list of requirements.")
+
+# Re-defining TestCases to be a simple dictionary container for the lists.
+# This structure helps in organizing positive and negative test cases.
+class TestCases(BaseModel):
+    """
+    A container for separate lists of positive and negative test cases.
+    """
+    positive: List[TestCase] = Field(..., description="A list of positive test cases.")
+    negative: List[TestCase] = Field(..., description="A list of negative test cases.")
+
+
 class RequirementMatrixList(BaseModel):
     """
-    A container model for a list of requirements traceability matrices.
-    This wrapper class is necessary to conform to the input requirements of LangChain's structured output.
+    A container for a list of requirement traceability matrix entries.
     """
-    requirements_matrix: List[RequirementMatrix] = Field(description="A list of requirements traceability matrix entries.")
+    requirements_matrix: List[RequirementMatrix] = Field(..., description="A list of requirement traceability matrix entries.")
 
 class FullQAOutput(BaseModel):
     """
-    Defines the complete, combined schema for the final QA output.
-    This model contains all the individual document models as its fields,
-    allowing the LLM to generate a single, comprehensive JSON object.
+    The complete schema for the 'All Documents' output,
+    containing all other schemas.
     """
-    user_story: UserStory = Field(description="The user story for the request.")
-    requirements: List[Requirement] = Field(description="A list of all requirements derived from the request.")
-    test_cases: TestCases = Field(description="All test cases (positive and negative) for the request.")
-    requirements_matrix: List[RequirementMatrix] = Field(description="The traceability matrix linking requirements to test cases.")
+    user_story: UserStory = Field(..., description="The generated user story.")
+    requirements: RequirementsList = Field(..., description="The generated list of requirements.")
+    test_cases: TestCases = Field(..., description="The generated list of test cases.")
+    requirements_matrix: RequirementMatrixList = Field(..., description="The generated requirements traceability matrix.")
